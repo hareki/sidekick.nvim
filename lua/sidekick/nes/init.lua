@@ -4,6 +4,7 @@ local Util = require("sidekick.util")
 local M = {}
 
 M._edits = {} ---@type sidekick.NesEdit[]
+M._pending_edits = {} ---@type sidekick.NesEdit[]
 M._requests = {} ---@type table<number, number>
 M.enabled = false
 M.did_setup = false
@@ -142,7 +143,10 @@ end
 
 ---@private
 ---@param buf? number
-function M.get(buf)
+---@param source? "edits"|"pending" -- which source to filter from
+function M.get(buf, source)
+  source = source or "edits"
+  local edits = source == "pending" and M._pending_edits or M._edits
   ---@param edit sidekick.NesEdit
   return vim.tbl_filter(function(edit)
     if not vim.api.nvim_buf_is_valid(edit.buf) then
@@ -158,13 +162,14 @@ function M.get(buf)
       return false
     end
     return buf == nil or edit.buf == buf
-  end, M._edits)
+  end, edits)
 end
 
 -- Clear all active edits
 function M.clear()
   M.cancel()
   M._edits = {}
+  M._pending_edits = {}
   require("sidekick.nes.ui").update()
 end
 
@@ -190,18 +195,20 @@ function M._handler(err, res, ctx)
     return
   end
 
-  M._edits = {}
+  M._pending_edits = {}
 
   res = res or { edits = {} }
 
   for _, edit in ipairs(res.edits or {}) do
     local e = require("sidekick.nes.edit").new(client, edit)
     if e:valid() and is_enabled(e.buf) then
-      table.insert(M._edits, e)
+      table.insert(M._pending_edits, e)
     end
   end
 
-  require("sidekick.nes.ui").update()
+  if Config.nes.mode == "immediate" then
+    M.render_nes()
+  end
 end
 
 --- Jump to the start of the active edit
@@ -261,7 +268,45 @@ function M.have()
   if not is_enabled(buf) then
     return false
   end
-  return #M.get(buf) > 0
+  return #M.get(buf, "pending") > 0
+end
+
+-- Check if any rendered edits are active in the current buffer
+function M.have_rendered()
+  local buf = vim.api.nvim_get_current_buf()
+  if not is_enabled(buf) then
+    return false
+  end
+  return #M.get(buf, "edits") > 0
+end
+
+--- Render pending edits for the current buffer
+function M.render_nes()
+  local buf = vim.api.nvim_get_current_buf()
+  if not is_enabled(buf) then
+    return
+  end
+
+  -- Move pending edits to active edits for current buffer only
+  local pending = M.get(buf, "pending")
+  if #pending > 0 then
+    -- Clear existing edits for this buffer
+    M._edits = vim.tbl_filter(function(edit)
+      return edit.buf ~= buf
+    end, M._edits)
+
+    -- Add pending edits for current buffer
+    for _, edit in ipairs(pending) do
+      table.insert(M._edits, edit)
+    end
+
+    -- Clear pending edits for this buffer
+    M._pending_edits = vim.tbl_filter(function(edit)
+      return edit.buf ~= buf
+    end, M._pending_edits)
+
+    require("sidekick.nes.ui").update()
+  end
 end
 
 --- Apply active text edits

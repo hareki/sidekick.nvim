@@ -17,6 +17,9 @@ local defaults = {
     enabled = function(buf)
       return vim.g.sidekick_nes ~= false and vim.b.sidekick_nes ~= false
     end,
+    -- "immediate": auto-render suggestions immediately
+    -- "pending": defer rendering until explicit render_nes() call
+    mode = "immediate", ---@type "immediate"|"pending"
     debounce = 100,
     trigger = {
       -- events that trigger sidekick next edit suggestions

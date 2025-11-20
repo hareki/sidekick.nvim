@@ -13,7 +13,7 @@ end
 ---@return boolean true if jumped or applied
 function M.nes_jump_or_apply()
   local Nes = require("sidekick.nes")
-  if Nes.have() and (Nes.jump() or Nes.apply()) then
+  if Nes.have_rendered() and (Nes.jump() or Nes.apply()) then
     return true
   end
   return false
