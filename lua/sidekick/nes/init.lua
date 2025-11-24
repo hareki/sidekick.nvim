@@ -79,7 +79,18 @@ function M.setup()
   end
 
   on(Config.nes.clear.events, M.clear)
-  on(Config.nes.trigger.events, Util.debounce(M.update, Config.nes.debounce))
+  on(Config.nes.trigger.events, function(ev)
+    local auto_render = Config.nes.auto_render
+    local force_render = false
+    if type(auto_render) == "function" then
+      force_render = auto_render(ev) or false
+    else
+      force_render = auto_render == true
+    end
+    Util.debounce(function()
+      M.update({ force_render = force_render })
+    end, Config.nes.debounce)()
+  end)
   on({ "BufEnter", "WinEnter" }, Util.debounce(did_focus, 10))
 
   if Config.nes.clear.esc then
@@ -116,7 +127,9 @@ local function is_enabled(buf)
 end
 
 -- Request new edits from the LSP server (if any)
-function M.update()
+---@param opts? {force_render?: boolean}
+function M.update(opts)
+  opts = opts or {}
   local buf = vim.api.nvim_get_current_buf()
   M.clear()
 
@@ -135,7 +148,9 @@ function M.update()
   params.context = { triggerKind = 2 }
 
   ---@diagnostic disable-next-line: param-type-mismatch
-  local ok, request_id = client:request("textDocument/copilotInlineEdit", params, M._handler)
+  local ok, request_id = client:request("textDocument/copilotInlineEdit", params, function(err, res, ctx)
+    M._handler(err, res, ctx, opts.force_render or false)
+  end)
   if ok and request_id then
     M._requests[client.id] = request_id
   end
@@ -186,8 +201,9 @@ function M.cancel()
 end
 
 ---@param res {edits: sidekick.lsp.NesEdit[]}
+---@param force_render boolean
 ---@type lsp.Handler
-function M._handler(err, res, ctx)
+function M._handler(err, res, ctx, force_render)
   M._requests[ctx.client_id] = nil
 
   local client = vim.lsp.get_client_by_id(ctx.client_id)
@@ -206,7 +222,7 @@ function M._handler(err, res, ctx)
     end
   end
 
-  if Config.nes.mode == "immediate" then
+  if force_render then
     M.render_nes()
   end
 end

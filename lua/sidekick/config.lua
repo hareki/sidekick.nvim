@@ -17,9 +17,14 @@ local defaults = {
     enabled = function(buf)
       return vim.g.sidekick_nes ~= false and vim.b.sidekick_nes ~= false
     end,
-    -- "immediate": auto-render suggestions immediately
-    -- "pending": defer rendering until explicit render_nes() call
-    mode = "immediate", ---@type "immediate"|"pending"
+    ---@type boolean|fun(ev:vim.api.keyset.create_autocmd.callback_args):boolean?
+    -- Controls whether pending edits should be auto-rendered
+    -- boolean: true = always auto-render, false = never auto-render
+    -- function: receives the autocmd event that triggered the update
+    --   ev.event: event name (e.g., "User", "TextChanged")
+    --   ev.match: for User events, the pattern (e.g., "SidekickNesDone")
+    --   return true to auto-render, false to keep pending
+    auto_render = true,
     debounce = 100,
     trigger = {
       -- events that trigger sidekick next edit suggestions
